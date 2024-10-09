@@ -1,0 +1,38 @@
+# This is a basic workflow to help you get started with Actions
+
+name: action-test
+run-name: Actions POC
+
+# Controls when the workflow will run
+on: 
+  issues:
+    types: opened
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  analyse_issue:
+    if: github.event.issue.labels[1] != null && (contains(github.event.issue.labels.*.name, 'bug') || contains(github.event.issue.labels.*.name, 'feature')) && contains(join(github.event.issue.labels.*.name, ' '), 'priority')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+        
+      - name: Run Python function
+        run: python test.py ${{ github.event.issue.body }} ${{ github.event.issue.labels }} 
+        shell: sh
+        
+      - name: Close issue
+        run: gh issue close "$NUMBER" --comment "Closing issue" 
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          URL: ${{ github.event.issue.url }}
+    
