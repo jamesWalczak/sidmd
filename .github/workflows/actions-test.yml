@@ -25,7 +25,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
         
       - name: Run Python function
-        run: python test.py ${{ github.event.issue.body }} ${{ github.event.issue.labels }} 
+        run: python test.py ${{ github.event.issue.body }} ${{ join(github.event.issue.labels.*.name, ', ') }} 
         shell: sh
         
       - name: Close issue
