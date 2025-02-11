@@ -1,0 +1,38 @@
+name: pr-on-close
+run-name: Create a PR to main on issue close
+
+on: 
+  issues:
+    types: closed
+
+jobs:
+  analyse_issue:
+    if: github.event.issue.labels[1] != null && (contains(github.event.issue.labels.*.name, 'bug') || contains(github.event.issue.labels.*.name, 'feature')) && contains(join(github.event.issue.labels.*.name, ' '), 'priority') && contains(join(github.event.issue.labels.*.name, ' '), 'in progress')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+    env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          URL: ${{ github.event.issue.url }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Fetch comments and find branch name
+        id: find_branch_name
+        run: |
+          comments=$(gh api repos/$GH_REPO/issues/$NUMBER/comments)
+          output=$(python .sidmd/find_branch_name.py "$comments" )
+          echo "branch_name=$output" >> "$GITHUB_OUTPUT"
+          
+      - name: Create a pull request to review changes
+        run: gh pr create -B main -H ${{ steps.find_branch_name.outputs.branch_name }} --title "Merge ${{ steps.find_branch_name.outputs.branch_name }} into main" --body "Pull request from the reviewed changes made in the barnch ${{ steps.find_branch_name.outputs.branch_name }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

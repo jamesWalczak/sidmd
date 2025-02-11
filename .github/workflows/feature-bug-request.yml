@@ -1,0 +1,109 @@
+name: feature-bug-request
+run-name: Implement a feature / fix a bug on request
+
+on: 
+  issues:
+    types: opened
+
+jobs:
+  analyse_issue:
+    if: github.event.issue.labels[1] != null && (contains(github.event.issue.labels.*.name, 'bug') || contains(github.event.issue.labels.*.name, 'feature')) && contains(join(github.event.issue.labels.*.name, ' '), 'priority')
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+    env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number }}
+          URL: ${{ github.event.issue.url }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ github.repository }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine label
+        id: determine-label
+        run: echo "label=${{ (contains(toJson(github.event.issue.labels.*.name), 'bug') && !contains(toJson(github.event.issue.labels.*.name), 'feature')) && 'bug' || (contains(toJson(github.event.issue.labels.*.name), 'feature') && !contains(toJson(github.event.issue.labels.*.name), 'bug')) && 'feature' || 'none' }}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract file path from issue body
+        id: extract-path
+        run: |
+          # Extract the first line
+          first_line=$(echo "${{ github.event.issue.body }}" | head -n 1)
+
+          # Extract the value inside the single quotes
+          file_path=$(echo "$first_line" | sed -E "s/path: '([^']+)'/\\1/")
+
+          # Debugging output
+          echo "First line: $first_line"
+          echo "Extracted file path: $file_path"
+          echo "file_path=$file_path" >> "$GITHUB_OUTPUT"
+          
+      - name: Map the files
+        id: map-files
+        run: |
+          output=$(python .sidmd/file_crawler.py --path '${{ steps.extract-path.outputs.file_path }}' )
+          echo "output: $output"
+          echo "file_structure=$output" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: |
+          chmod +x .sidmd/install_dependencies.sh
+          .sidmd/install_dependencies.sh 
+          
+      - name: Run AI query
+        id: run-ai
+        run: |
+          sanitized_body=$(echo "$ISSUE_BODY" | sed 's/"/\\"/g; s/!/\\!/g; s/\$/\\\$/g')
+          output=$(python .sidmd/generate_code.py '${{ steps.determine-label.outputs.label }}' "$sanitized_body" '${{ steps.map-files.outputs.file_structure }}')
+          touch generated_script.json
+          echo "$output"
+          echo "$output" > generated_script.json
+        env:
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+
+      - name: Write into the repository
+        id: write-to-repository
+        run: |
+          python .sidmd/write_changes.py --structure 'generated_script.json'
+          rm generated_script.json
+
+      - name: Set branch name
+        id: set-branch-name
+        run: |
+          # Generate a dynamic branch name based on the current date and time
+          branch_name="branch-$NUMBER-$(date +'%Y%m%d%H%M%S')"
+          echo "branch_name=$branch_name" >> "$GITHUB_OUTPUT"
+          
+      - name: Create branch
+        run: |
+          branch_name="${{ steps.set-branch-name.outputs.branch_name }}"
+          git checkout -b $branch_name
+          git push --set-upstream origin $branch_name
+
+      - name: Switch to the new branch
+        run: |
+          git fetch
+          git switch ${{ steps.set-branch-name.outputs.branch_name }}
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "Automated creation of file structure"
+          git push
+          
+      - name: Add a label
+        run: gh issue edit "$NUMBER" --add-label "in progress"
+
+      - name: Post a comment
+        run: |
+          BODY="The code has been successfully generated. Please review the changes in the latest commit of branch  ${{ github.server_url }}/${{ github.repository }}/tree/${{ steps.set-branch-name.outputs.branch_name }}"
+          gh issue comment "$NUMBER" --body "$BODY"
+    
