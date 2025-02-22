@@ -18,6 +18,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.issue.number }}
           ISSUE_BODY: ${{ github.event.issue.body }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
           URL: ${{ github.event.issue.url }}
     steps:
       - name: Checkout code
@@ -64,24 +65,12 @@ jobs:
         id: run-ai
         run: |
           file_structure=$(echo '${{ steps.map-files.outputs.file_structure }}' | base64 -d)
-          sanitized_comment_body=$(echo "${{ github.event.comment.body }}" | sed 's/"/\\"/g; s/!/\\!/g; s/\$/\\\$/g')
+          sanitized_comment_body=$(echo "$COMMENT_BODY" | sed 's/"/\\"/g; s/!/\\!/g; s/\$/\\\$/g')
           output=$(python .sidmd/generate_code.py 'feature' "$sanitized_comment_body" "$file_structure")
           touch generated_script.json
           echo "$output" > generated_script.json
-#          encoded_ai_output=$(echo "$output" | base64 -w 0)
- #         echo "ai_output=$encoded_ai_output" >> "$GITHUB_OUTPUT"
         env:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
-
-#      - name: Validate output
- #       id: validate-ai-output
-#        run: |
- #         ai_output=$(echo '${{ steps.run-ai.outputs.ai_output }}' | base64 -d)
-#          output=$(python aitest.py 'validation' "$ai_output" '')
- #         touch generated_script.json
-#          echo "$output" > generated_script.json
- #       env:
-#          AI_API_KEY: ${{ secrets.AI_API_KEY }}
 
       - name: Write into the repository
         id: write-to-repository
@@ -96,10 +85,17 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add .
-          git commit -m "Automated creation of file structure"
+          git commit -m "Comment-based change"
           git push
 
+      - name: Handle failure
+        if: failure()
+        run: |
+          BODY="The workflow could not be completed, changes from the comment have not been implemented. Please try again. To find out more about the error, see workflow run at ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue comment "$NUMBER" --body "$BODY"
+
       - name: Post a comment
+        if: success()
         run: |
           BODY="The code has been successfully updated according to the instructions provided in the comment. Please review the changes in the latest commit of branch  ${{ github.server_url }}/${{ github.repository }}/tree/${{ steps.find_branch_name.outputs.branch_name }}"
           gh issue comment "$NUMBER" --body "$BODY"

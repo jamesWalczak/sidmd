@@ -3,11 +3,15 @@ import json
 import argparse
 
 def get_files(path):
-  files = {}
-  for root, _, filenames in os.walk(path):
-    for filename in filenames:
-      files[os.path.abspath(os.path.join(root, filename))] = ""
-  return files
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Path does not exist: {path}")
+
+    files = {}
+    for root, _, filenames in os.walk(path):
+        for filename in filenames:
+            files[os.path.abspath(os.path.join(root, filename))] = ""
+    
+    return files
 
 def prepare_json(files):
   for file in files:
@@ -20,6 +24,6 @@ if __name__ == "__main__":
   parser.add_argument("--path", type=str, required=True)
   args = parser.parse_args()
   
-  path = args.path.strip()  # Trim leading/trailing spaces
+  path = args.path.strip()
   files = prepare_json(get_files(path))
   print(files)

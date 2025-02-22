@@ -15,6 +15,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.issue.number }}
           URL: ${{ github.event.issue.url }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
     
     steps:
       - name: Checkout repository
@@ -27,7 +28,7 @@ jobs:
         id: set-branch-name
         run: |
           # Generate a dynamic branch name based on the current date and time
-          branch_name="branch-$"NUMBER"-$(date +'%Y%m%d%H%M%S')"
+          branch_name="branch-$NUMBER-$(date +'%Y%m%d%H%M%S')"
           echo "branch_name=$branch_name" >> "$GITHUB_OUTPUT"
           
       - name: Create branch
@@ -48,7 +49,8 @@ jobs:
           
       - name: Run AI query
         run: |
-          output=$(python .sidmd/generate_code.py 'initiation' '${{ github.event.issue.body }}' '')
+          output=$(python .sidmd/generate_code.py 'initiation' "$ISSUE_BODY" '')
+          echo "$output"
           echo "$output" | bash
         env:
           AI_API_KEY: ${{ secrets.AI_API_KEY }}
@@ -60,18 +62,22 @@ jobs:
           git add .
           git commit -m "Automated creation of file structure"
           git push
-          
-      - name: Add a label
-        run: gh issue edit "$NUMBER" --add-label "in progress"
+
+      - name: Handle failure
+        if: failure()
+        run: |
+          BODY="The workflow could not be completed, changes from the comment have not been implemented. Please try again. To find out more about the error, see workflow run at ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue comment "$NUMBER" --body "$BODY"
 
       - name: Post a comment
+        if: success()
         run: |
           BODY="The code has been successfully generated. Please review the changes in the latest commit of branch  ${{ github.server_url }}/${{ github.repository }}/tree/${{ steps.set-branch-name.outputs.branch_name }}"
           gh issue comment "$NUMBER" --body "$BODY"
 
- #     - name: Create a pull request to review changes
-  #      run: gh pr create -B main -H ${{ steps.set-branch-name.outputs.branch_name }} --title 'Merge ${{ steps.set-branch-name.outputs.branch_name }} into main' --body 'Created by Github action'
-   #     env:
-    #      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create a pull request to review changes
+        run: gh pr create -B main -H ${{ steps.set-branch-name.outputs.branch_name }} --title 'Merge ${{ steps.set-branch-name.outputs.branch_name }} into main' --body 'Created by Github action'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
         

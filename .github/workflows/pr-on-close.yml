@@ -36,3 +36,13 @@ jobs:
         run: gh pr create -B main -H ${{ steps.find_branch_name.outputs.branch_name }} --title "Merge ${{ steps.find_branch_name.outputs.branch_name }} into main" --body "Pull request from the reviewed changes made in the barnch ${{ steps.find_branch_name.outputs.branch_name }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Handle failure
+        if: failure()
+        run: |
+          BODY="The workflow could not be completed, pull request was not created. To find out more about the error, see workflow run at ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          gh issue comment "$NUMBER" --body "$BODY"
+
+      - name: Remove the in progress label
+        run: gh issue edit "$NUMBER" --remove-label "in progress"
+
