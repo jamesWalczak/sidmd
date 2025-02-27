@@ -28,7 +28,7 @@ jobs:
         id: set-branch-name
         run: |
           # Generate a dynamic branch name based on the current date and time
-          branch_name="branch-$NUMBER-$(date +'%Y%m%d%H%M%S')"
+          branch_name="branch-$NUMBER"
           echo "branch_name=$branch_name" >> "$GITHUB_OUTPUT"
           
       - name: Create branch
