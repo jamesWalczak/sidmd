@@ -1,6 +1,9 @@
 # SIDMD
 
-Automated code generation
+Automated code generation.
+
+> [!IMPORTANT]\
+> This is a **template** repository. To use its functionalities, use this template to create own repository.
 
 ## Connecting an LLM
 
